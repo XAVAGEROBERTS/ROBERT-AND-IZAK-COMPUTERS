@@ -7,6 +7,9 @@ const Footer = ({ currentLanguage }) => {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [backToTopHover, setBackToTopHover] = useState(false);
 
+  // Get current year dynamically
+  const currentYear = new Date().getFullYear();
+
   // Show back to top button when scrolled down
   useEffect(() => {
     const handleScroll = () => {
@@ -58,7 +61,7 @@ const Footer = ({ currentLanguage }) => {
       contact: "Contact Us",
       storeLocator: "Store Locator",
       careers: "Careers",
-      copyright: "© 2025 ROBERT & IZAK COMPUTERS. All rights reserved."
+      copyright: `© 1996-${currentYear} ROBERT & IZAK COMPUTERS. All rights reserved.`
     },
     es: {
       backToTop: "Volver arriba",
@@ -82,7 +85,7 @@ const Footer = ({ currentLanguage }) => {
       contact: "Contáctenos",
       storeLocator: "Localizador de Tiendas",
       careers: "Carreras",
-      copyright: "© 2025 ROBERT & IZAK COMPUTERS. Todos los derechos reservados."
+      copyright: `© 1996-${currentYear} ROBERT & IZAK COMPUTERS. Todos los derechos reservados.`
     },
     fr: {
       backToTop: "Retour en haut",
@@ -106,13 +109,13 @@ const Footer = ({ currentLanguage }) => {
       contact: "Nous Contacter",
       storeLocator: "Localisateur de Magasins",
       careers: "Carrières",
-      copyright: "© 2025 ROBERT & IZAK COMPUTERS. Tous droits réservés."
+      copyright: `© 1996-${currentYear} ROBERT & IZAK COMPUTERS. Tous droits réservés.`
     }
   };
 
   // Helper function for translations
   const t = (key) => {
-    return translations[currentLanguage][key] || translations.en[key];
+    return translations[currentLanguage]?.[key] || translations.en[key];
   };
 
   // Computer-focused footer sections - now translated based on header language
