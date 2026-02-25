@@ -101,12 +101,12 @@ const CustomerServicePage = ({
       ];
       setDrivers(latestDrivers);
 
-      // Load store locations
+      // Load store locations - UPDATED WITH YOUR CONTACT
       const storeLocations = [
-        { id: 1, name: 'Kampala Main Store', address: 'Shop 12, Garden City Mall, Kampala', phone: '+256 789 123456', hours: '9 AM - 9 PM' },
-        { id: 2, name: 'Entebbe Service Center', address: 'Plot 45, Entebbe Road', phone: '+256 789 234567', hours: '8 AM - 8 PM' },
-        { id: 3, name: 'Jinja Branch', address: 'Main Street, Jinja', phone: '+256 789 345678', hours: '9 AM - 7 PM' },
-        { id: 4, name: 'Mbale Tech Hub', address: 'Commercial Street, Mbale', phone: '+256 789 456789', hours: '8 AM - 6 PM' },
+        { id: 1, name: 'Kampala Main Store', address: 'Shop 12, Garden City Mall, Kampala', phone: '+256 765673373', hours: '9 AM - 9 PM' },
+        { id: 2, name: 'Entebbe Service Center', address: 'Plot 45, Entebbe Road', phone: '+256 765673373', hours: '8 AM - 8 PM' },
+        { id: 3, name: 'Jinja Branch', address: 'Main Street, Jinja', phone: '+256 765673373', hours: '9 AM - 7 PM' },
+        { id: 4, name: 'Mbale Tech Hub', address: 'Commercial Street, Mbale', phone: '+256 765673373', hours: '8 AM - 6 PM' },
       ];
       setStores(storeLocations);
 
@@ -166,7 +166,7 @@ const CustomerServicePage = ({
         businessHours: "Business Hours",
         hoursDescription: "Monday - Friday: 8am - 8pm EAT\nSaturday: 9am - 6pm EAT\nSunday: 10am - 5pm EAT",
         emergencySupport: "24/7 Emergency Tech Support",
-        emergencyNumber: "+256 800 123 456",
+        emergencyNumber: "+256 765673373", // UPDATED WITH YOUR NUMBER
         needImmediateHelp: "Need Immediate Help?",
         chatDescription: "Chat with our support team in real-time",
         callDescription: "Speak directly with a customer service representative",
@@ -258,7 +258,7 @@ const CustomerServicePage = ({
         businessHours: "Horario Comercial",
         hoursDescription: "Lunes - Viernes: 8am - 8pm EAT\nSábado: 9am - 6pm EAT\nDomingo: 10am - 5pm EAT",
         emergencySupport: "Soporte Técnico de Emergencia 24/7",
-        emergencyNumber: "+256 800 123 456",
+        emergencyNumber: "+256 765673373", // UPDATED WITH YOUR NUMBER
         needImmediateHelp: "¿Necesitas Ayuda Inmediata?",
         chatDescription: "Chatea con nuestro equipo de soporte en tiempo real",
         callDescription: "Habla directamente con un representante de servicio al cliente",
@@ -350,7 +350,7 @@ const CustomerServicePage = ({
         businessHours: "Heures d'Ouverture",
         hoursDescription: "Lundi - Vendredi: 8h - 20h EAT\nSamedi: 9h - 18h EAT\nDimanche: 10h - 17h EAT",
         emergencySupport: "Support Technique d'Urgence 24/7",
-        emergencyNumber: "+256 800 123 456",
+        emergencyNumber: "+256 765673373", // UPDATED WITH YOUR NUMBER
         needImmediateHelp: "Besoin d'Aide Immédiate?",
         chatDescription: "Discutez avec notre équipe de support en temps réel",
         callDescription: "Parlez directement avec un représentant du service client",
@@ -556,7 +556,7 @@ const CustomerServicePage = ({
           serial_number: repairForm.serialNumber,
           issue: repairForm.issue,
           preferred_date: repairForm.preferredDate,
-          contact_phone: repairForm.contactPhone,
+          contact_phone: repairForm.contactPhone || t('emergencyNumber'), // Use form number or default
           status: 'scheduled'
         }])
         .select()
@@ -681,6 +681,7 @@ const CustomerServicePage = ({
   };
 
   const handleCallStore = (phone) => {
+    // This will now use your number +256 765673373
     alert(`Calling ${phone}...\n\nThis is a demo. In production, this would initiate a phone call.`);
     // In production: window.location.href = `tel:${phone}`;
   };
@@ -1451,7 +1452,7 @@ const CustomerServicePage = ({
           white-space: pre-line;
         }
 
-        /* Emergency Support */
+        /* Emergency Support - UPDATED WITH YOUR NUMBER */
         .cs-emergency-section {
           background: linear-gradient(135deg, #c45500, #e47911);
           color: white;
@@ -1529,7 +1530,7 @@ const CustomerServicePage = ({
           background: #005566;
         }
 
-        /* Stores List */
+        /* Stores List - UPDATED WITH YOUR NUMBER */
         .cs-stores-list {
           margin-top: 20px;
         }
@@ -1998,12 +1999,16 @@ const CustomerServicePage = ({
                   </button>
                 </div>
 
+                {/* UPDATED: Call Us with YOUR number */}
                 <div className="cs-contact-card" onClick={() => window.open(`tel:${t('emergencyNumber')}`, '_blank')}>
                   <div className="cs-contact-icon">
                     <Phone size={32} color="#232f3e" />
                   </div>
                   <h3 className="cs-contact-title">{t('callUs')}</h3>
                   <p className="cs-contact-description">{t('callDescription')}</p>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', color: '#007185' }}>
+                    {t('emergencyNumber')}
+                  </div>
                   <button className="cs-contact-btn">
                     {t('callNow')}
                   </button>
@@ -2179,7 +2184,7 @@ const CustomerServicePage = ({
               </div>
             )}
 
-            {/* Store Locations */}
+            {/* Store Locations - UPDATED WITH YOUR NUMBER */}
             <div className="cs-sidebar-section">
               <h3 className="cs-sidebar-title">
                 <MapPin size={20} />
@@ -2191,6 +2196,9 @@ const CustomerServicePage = ({
                     <div className="cs-store-name">{store.name}</div>
                     <div className="cs-store-address">{store.address}</div>
                     <div className="cs-store-hours">Hours: {store.hours}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#007185', marginBottom: '8px' }}>
+                      {store.phone}
+                    </div>
                     <button 
                       className="cs-store-call-btn"
                       onClick={() => handleCallStore(store.phone)}
@@ -2214,7 +2222,7 @@ const CustomerServicePage = ({
               </div>
             </div>
 
-            {/* Emergency Support */}
+            {/* Emergency Support - UPDATED WITH YOUR NUMBER */}
             <div className="cs-emergency-section">
               <div className="cs-emergency-header">
                 <AlertCircle size={24} />
@@ -2378,8 +2386,11 @@ const CustomerServicePage = ({
                 className="cs-form-input"
                 value={repairForm.contactPhone}
                 onChange={(e) => setRepairForm({ ...repairForm, contactPhone: e.target.value })}
-                placeholder="+256 XXX XXX XXX"
+                placeholder="+256 765673373"
               />
+              <small style={{ color: '#666', display: 'block', marginTop: '5px' }}>
+                Default: {t('emergencyNumber')}
+              </small>
             </div>
             <div className="cs-form-actions">
               <button className="cs-form-cancel-btn" onClick={() => setShowRepairForm(false)}>
