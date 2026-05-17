@@ -46,8 +46,49 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
     }
   };
 
-  const updateOrderStatus = async (orderId, newStatus) => {
+  // Helper function to extract product ID from different item structures
+  const getProductId = (item) => {
+    // Try different possible field names
+    return item.product_id || item.id || item.productId || item.product?.id || null;
+  };
+
+  // Helper function to get quantity from different item structures
+  const getQuantity = (item) => {
+    return item.quantity || item.qty || item.Quantity || 1;
+  };
+
+  // Helper function to get product name for logging
+  const getProductName = (item) => {
+    return item.product_name || item.name || item.title || item.product?.name || 'Unknown Product';
+  };
+
+  // 🔥 MAIN FUNCTION: Updates order status AND decreases inventory when confirmed/delivered
+  const updateOrderStatus = async (orderId, newStatus, currentStatus) => {
+    // If status didn't change, do nothing
+    if (newStatus === currentStatus) return;
+    
     try {
+      // Check if we need to update inventory (when changing to confirmed or delivered)
+      const needsInventoryUpdate = (newStatus === 'confirmed' || newStatus === 'delivered') && 
+                                    (currentStatus !== 'confirmed' && currentStatus !== 'delivered');
+      
+      let orderItems = null;
+      
+      if (needsInventoryUpdate) {
+        // Get order items first
+        const { data: order, error: orderError } = await supabase
+          .from('orders')
+          .select('items, order_number')
+          .eq('id', orderId)
+          .single();
+          
+        if (!orderError && order) {
+          orderItems = order?.items || [];
+          console.log('📦 Order items structure:', orderItems);
+        }
+      }
+      
+      // Update order status
       const { error } = await supabase
         .from('orders')
         .update({ 
@@ -58,8 +99,56 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
 
       if (error) throw error;
       
+      // Decrease inventory for each product in the order
+      if (needsInventoryUpdate && orderItems && orderItems.length > 0) {
+        let successCount = 0;
+        
+        for (const item of orderItems) {
+          const productId = getProductId(item);
+          const quantity = getQuantity(item);
+          const productName = getProductName(item);
+          
+          if (!productId) {
+            console.warn('⚠️ No product ID found for item:', item);
+            continue;
+          }
+          
+          try {
+            console.log(`🔄 Attempting to decrease stock for ${productName} (ID: ${productId}) by ${quantity}`);
+            
+            const { data: stockResult, error: stockError } = await supabase.rpc('decrease_product_stock', {
+              p_product_id: productId,
+              p_quantity: quantity
+            });
+            
+            if (!stockError) {
+              successCount++;
+              console.log(`✅ Stock decreased: ${productName} -${quantity}`);
+            } else {
+              console.error(`❌ Failed to update stock for ${productName}:`, stockError);
+            }
+          } catch (err) {
+            console.error(`❌ Error updating stock for ${productName}:`, err);
+          }
+        }
+        
+        if (successCount > 0) {
+          showPopupMessage(`✅ Order ${newStatus}! Inventory updated (${successCount} product${successCount > 1 ? 's' : ''})`, 'success');
+        } else if (needsInventoryUpdate && orderItems.length > 0) {
+          showPopupMessage(`⚠️ Order status updated to ${newStatus} but inventory update failed. Check product IDs.`, 'warning');
+        }
+      } else if (!needsInventoryUpdate) {
+        showPopupMessage(`Order status updated to ${newStatus}`, 'success');
+      } else if (needsInventoryUpdate && (!orderItems || orderItems.length === 0)) {
+        showPopupMessage(`Order status updated to ${newStatus} (No items to update inventory)`, 'success');
+      }
+      
       fetchOrders();
-      showPopupMessage(`Order status updated to ${newStatus}`, 'success');
+      
+      // Notify other components to refresh
+      window.dispatchEvent(new CustomEvent('ordersUpdated'));
+      window.dispatchEvent(new CustomEvent('inventoryUpdated'));
+      
     } catch (error) {
       console.error('Error updating order status:', error);
       showPopupMessage('Error updating order: ' + error.message, 'error');
@@ -75,13 +164,14 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
 
       if (error) throw error;
       
-      // Remove the order from local state
       setOrders(orders.filter(order => order.id !== orderId));
       setFilteredOrders(filteredOrders.filter(order => order.id !== orderId));
       
       setShowDeleteConfirm(false);
       setOrderToDelete(null);
       showPopupMessage('Order deleted successfully', 'success');
+      window.dispatchEvent(new CustomEvent('ordersUpdated'));
+      
     } catch (error) {
       console.error('Error deleting order:', error);
       showPopupMessage('Error deleting order: ' + error.message, 'error');
@@ -120,6 +210,7 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
     setShowOrderDetails(true);
   };
 
+  // Fix for the JSX warning - remove the jsx prop from style tag
   if (loading) {
     return (
       <div style={{ 
@@ -139,6 +230,12 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
           margin: '0 auto 20px'
         }}></div>
         <p style={{ color: currentTheme.textMuted, margin: 0 }}>Loading orders...</p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -200,8 +297,7 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
         ) : (
           <div style={{ overflowX: 'auto' }}>
             {isMobile ? (
-              // Mobile view - card layout
-              <div style={{ padding: isMobile ? '10px' : '0' }}>
+              <div style={{ padding: '10px' }}>
                 {filteredOrders.map(order => (
                   <div key={order.id} style={{
                     padding: '15px',
@@ -258,7 +354,7 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
                       </button>
                       <select
                         value={order.status}
-                        onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                        onChange={(e) => updateOrderStatus(order.id, e.target.value, order.status)}
                         style={{
                           padding: '8px',
                           border: `1px solid ${currentTheme.border}`,
@@ -278,7 +374,6 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
                       </select>
                     </div>
                     
-                    {/* Delete button for mobile */}
                     <div style={{ marginTop: '8px' }}>
                       <button 
                         onClick={() => confirmDeleteOrder(order)}
@@ -301,7 +396,6 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
                 ))}
               </div>
             ) : (
-              // Desktop view - table layout
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
                 <thead>
                   <tr style={{ background: theme === 'light' ? '#f7fafc' : '#4a5568' }}>
@@ -344,7 +438,7 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
                       <td style={{ padding: '12px', borderBottom: `1px solid ${currentTheme.border}` }}>
                         <select
                           value={order.status}
-                          onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                          onChange={(e) => updateOrderStatus(order.id, e.target.value, order.status)}
                           style={{
                             padding: '6px 8px',
                             border: `1px solid ${currentTheme.border}`,
@@ -439,13 +533,6 @@ const OrdersManagement = ({ searchTerm, theme, currentTheme, showPopupMessage, i
           isMobile={isMobile}
         />
       )}
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };
@@ -536,7 +623,7 @@ const DeleteConfirmationModal = ({ order, onClose, onConfirm, theme, currentThem
   );
 };
 
-// Order Details Modal Component (updated with delete button)
+// Order Details Modal Component
 const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, getCurrencySymbol, isMobile, updateOrderStatus, onDelete }) => {
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -608,14 +695,13 @@ const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, 
         </div>
 
         <div style={{ display: 'grid', gap: '20px' }}>
-          {/* Order Status */}
           <div>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: currentTheme.text }}>
               Order Status
             </label>
             <select
               value={order.status}
-              onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+              onChange={(e) => updateOrderStatus(order.id, e.target.value, order.status)}
               style={{
                 padding: '8px 12px',
                 border: `1px solid ${currentTheme.border}`,
@@ -635,7 +721,6 @@ const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, 
             </select>
           </div>
 
-          {/* Customer Information */}
           <div>
             <h4 style={{ margin: '0 0 10px 0', color: currentTheme.text }}>Customer Information</h4>
             <div style={{ 
@@ -644,23 +729,14 @@ const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, 
               borderRadius: '8px'
             }}>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <strong>Name:</strong> {order.customer_name}
-                </div>
-                <div>
-                  <strong>Email:</strong> {order.customer_email}
-                </div>
-                <div>
-                  <strong>Phone:</strong> {order.customer_phone}
-                </div>
-                <div>
-                  <strong>Order Date:</strong> {formatDate(order.created_at)}
-                </div>
+                <div><strong>Name:</strong> {order.customer_name}</div>
+                <div><strong>Email:</strong> {order.customer_email}</div>
+                <div><strong>Phone:</strong> {order.customer_phone}</div>
+                <div><strong>Order Date:</strong> {formatDate(order.created_at)}</div>
               </div>
             </div>
           </div>
 
-          {/* Shipping Address */}
           <div>
             <h4 style={{ margin: '0 0 10px 0', color: currentTheme.text }}>Shipping Address</h4>
             <div style={{ 
@@ -678,7 +754,6 @@ const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, 
             </div>
           </div>
 
-          {/* Order Items */}
           <div>
             <h4 style={{ margin: '0 0 10px 0', color: currentTheme.text }}>Order Items</h4>
             <div style={{ 
@@ -715,7 +790,6 @@ const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, 
                 </div>
               ))}
               
-              {/* Order Total */}
               <div style={{ 
                 display: 'flex', 
                 justifyContent: 'space-between', 
@@ -732,7 +806,6 @@ const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, 
             </div>
           </div>
 
-          {/* Notes */}
           {order.notes && (
             <div>
               <h4 style={{ margin: '0 0 10px 0', color: currentTheme.text }}>Customer Notes</h4>
@@ -788,56 +861,7 @@ const OrderDetailsModal = ({ order, onClose, theme, currentTheme, convertPrice, 
         </div>
       </div>
     </div>
-    
   );
 };
-const deleteOrder = async (orderId) => {
-  try {
-    const { error } = await supabase
-      .from('orders')
-      .delete()
-      .eq('id', orderId);
 
-    if (error) throw error;
-    
-    // Remove the order from local state
-    setOrders(orders.filter(order => order.id !== orderId));
-    setFilteredOrders(filteredOrders.filter(order => order.id !== orderId));
-    
-    setShowDeleteConfirm(false);
-    setOrderToDelete(null);
-    showPopupMessage('Order deleted successfully', 'success');
-    
-    // 🔥 IMPORTANT: Notify AnalyticsDashboard to refresh
-    window.dispatchEvent(new CustomEvent('ordersUpdated'));
-    
-  } catch (error) {
-    console.error('Error deleting order:', error);
-    showPopupMessage('Error deleting order: ' + error.message, 'error');
-  }
-};
-
-const updateOrderStatus = async (orderId, newStatus) => {
-  try {
-    const { error } = await supabase
-      .from('orders')
-      .update({ 
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', orderId);
-
-    if (error) throw error;
-    
-    fetchOrders();
-    showPopupMessage(`Order status updated to ${newStatus}`, 'success');
-    
-    // 🔥 IMPORTANT: Also notify on status changes
-    window.dispatchEvent(new CustomEvent('ordersUpdated'));
-    
-  } catch (error) {
-    console.error('Error updating order status:', error);
-    showPopupMessage('Error updating order: ' + error.message, 'error');
-  }
-};
 export default OrdersManagement;
