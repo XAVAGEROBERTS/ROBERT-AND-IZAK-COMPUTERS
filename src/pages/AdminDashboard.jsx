@@ -43,7 +43,7 @@ const AdminDashboard = ({ user }) => {
   const navigate = useNavigate();
 
   // Version configuration - YOU WILL UPDATE THIS WHEN YOU MAKE CHANGES
-  const CURRENT_VERSION = '1.0.9'; // Updated version
+  const CURRENT_VERSION = '1.1.0'; // Updated version
 
   // Load cleared notifications from localStorage on component mount
   useEffect(() => {
