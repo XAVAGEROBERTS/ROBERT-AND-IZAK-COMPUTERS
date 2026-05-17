@@ -503,6 +503,9 @@ function AppContent({
   );
 }
 
+// ============================================================================
+// CART SIDEBAR COMPONENT WITH STOCK VALIDATION
+// ============================================================================
 const CartSidebar = ({ 
   cart, 
   isCartOpen, 
@@ -519,6 +522,8 @@ const CartSidebar = ({
   navigate 
 }) => {
   const [localCurrency, setLocalCurrency] = useState(currentCurrency);
+  const [stockData, setStockData] = useState({});
+  const [loadingStock, setLoadingStock] = useState(false);
 
   useEffect(() => {
     const handleCurrencyChange = (event) => {
@@ -529,6 +534,75 @@ const CartSidebar = ({
     window.addEventListener('currencyChange', handleCurrencyChange);
     return () => window.removeEventListener('currencyChange', handleCurrencyChange);
   }, []);
+
+  // Fetch stock for all cart items
+  const fetchStockForCartItems = async () => {
+    if (!cart || cart.length === 0) return;
+    
+    setLoadingStock(true);
+    try {
+      const productIds = cart.map(item => item.id);
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, stock_quantity, name')
+        .in('id', productIds);
+      
+      if (error) throw error;
+      
+      const stockMap = {};
+      data.forEach(product => {
+        stockMap[product.id] = {
+          available: product.stock_quantity,
+          name: product.name
+        };
+      });
+      
+      setStockData(stockMap);
+      
+      // Check if any cart item exceeds stock and auto-correct
+      for (const item of cart) {
+        const stockInfo = stockMap[item.id];
+        if (stockInfo && item.quantity > stockInfo.available && stockInfo.available > 0) {
+          updateQuantity(item.id, stockInfo.available);
+        } else if (stockInfo && stockInfo.available === 0 && item.quantity > 0) {
+          // If out of stock, remove from cart
+          removeFromCart(item.id);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error fetching stock:', error);
+    } finally {
+      setLoadingStock(false);
+    }
+  };
+
+  // Fetch stock when cart changes
+  useEffect(() => {
+    fetchStockForCartItems();
+  }, [cart]);
+
+  // Handle quantity increase with stock validation
+  const handleIncreaseQuantity = async (item) => {
+    const currentStock = stockData[item.id]?.available || 0;
+    const newQuantity = item.quantity + 1;
+    
+    if (newQuantity > currentStock) {
+      alert(`⚠️ Cannot add more than ${currentStock} of "${item.name}". Only ${currentStock} left in stock!`);
+      return;
+    }
+    
+    updateQuantity(item.id, newQuantity);
+  };
+
+  // Handle quantity decrease
+  const handleDecreaseQuantity = (item) => {
+    if (item.quantity > 1) {
+      updateQuantity(item.id, item.quantity - 1);
+    } else {
+      removeFromCart(item.id);
+    }
+  };
 
   const effectiveCurrency = localCurrency || currentCurrency;
   const effectiveSymbol = getCurrencySymbol();
@@ -562,7 +636,22 @@ const CartSidebar = ({
           </button>
         </div>
         
-        {cart.length === 0 ? (
+        {loadingStock && (
+          <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+            <div style={{
+              width: '30px',
+              height: '30px',
+              border: '3px solid #f3f3f3',
+              borderTop: '3px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto 10px'
+            }}></div>
+            Checking stock availability...
+          </div>
+        )}
+        
+        {!loadingStock && cart.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <p>Your R&I Cart is empty</p>
             <button 
@@ -573,91 +662,138 @@ const CartSidebar = ({
             </button>
           </div>
         ) : (
-          <>
-            <div className="cart-currency-notice" style={{
-              padding: '10px',
-              backgroundColor: '#fff3cd',
-              border: '1px solid #ffeaa7',
-              borderRadius: '4px',
-              margin: '10px',
-              fontSize: '12px',
-              textAlign: 'center',
-              color: '#856404'
-            }}>
-              Prices in {effectiveCurrency} • Updates instantly
-            </div>
-            
-            {cart.map(item => (
-              <div key={item.id} className="cart-item">
-                <img 
-                  src={item.image_url} 
-                  alt={item.name}
-                  className="cart-item-image"
-                />
-                <div className="cart-item-details">
-                  <div className="cart-item-title">{item.name}</div>
-                  <div className="cart-item-price">
-                    {effectiveSymbol}{effectiveConvertPrice(item.price)} each
+          !loadingStock && (
+            <>
+              <div className="cart-currency-notice" style={{
+                padding: '10px',
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffeaa7',
+                borderRadius: '4px',
+                margin: '10px',
+                fontSize: '12px',
+                textAlign: 'center',
+                color: '#856404'
+              }}>
+                💰 Prices in {effectiveCurrency} • Updates instantly
+              </div>
+              
+              {cart.map(item => {
+                const stockInfo = stockData[item.id];
+                const availableStock = stockInfo?.available || 0;
+                const isLowStock = availableStock <= 5 && availableStock > 0;
+                const isOutOfStock = availableStock === 0;
+                const isAtMaxStock = item.quantity >= availableStock && availableStock > 0;
+                
+                return (
+                  <div key={item.id} className="cart-item">
+                    <img 
+                      src={item.image_url} 
+                      alt={item.name}
+                      className="cart-item-image"
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjRkZGRkZGIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzY2NjY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                      }}
+                    />
+                    <div className="cart-item-details">
+                      <div className="cart-item-title">{item.name}</div>
+                      <div className="cart-item-price">
+                        {effectiveSymbol}{effectiveConvertPrice(item.price)} each
+                      </div>
+                      
+                      {/* Stock Status Indicator */}
+                      {isOutOfStock && (
+                        <div style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', fontWeight: '500' }}>
+                          ⚠️ OUT OF STOCK - Please remove
+                        </div>
+                      )}
+                      {isLowStock && !isOutOfStock && (
+                        <div style={{ color: '#ed8936', fontSize: '12px', marginTop: '4px' }}>
+                          ⚠️ Only {availableStock} left in stock!
+                        </div>
+                      )}
+                      
+                      <div className="cart-item-controls">
+                        <button 
+                          className="quantity-btn"
+                          onClick={() => handleDecreaseQuantity(item)}
+                          disabled={isOutOfStock}
+                          style={{
+                            opacity: isOutOfStock ? 0.5 : 1,
+                            cursor: isOutOfStock ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          -
+                        </button>
+                        <span className="quantity-display">Qty: {item.quantity}</span>
+                        <button 
+                          className="quantity-btn"
+                          onClick={() => handleIncreaseQuantity(item)}
+                          disabled={isOutOfStock || isAtMaxStock}
+                          style={{
+                            opacity: (isOutOfStock || isAtMaxStock) ? 0.5 : 1,
+                            cursor: (isOutOfStock || isAtMaxStock) ? 'not-allowed' : 'pointer'
+                          }}
+                          title={isAtMaxStock ? `Maximum ${availableStock} available` : ''}
+                        >
+                          +
+                        </button>
+                        <button 
+                          className="remove-btn"
+                          onClick={() => removeFromCart(item.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <div className="cart-item-total">
+                        Total: {effectiveSymbol}{effectiveConvertPrice(item.price * item.quantity)}
+                      </div>
+                    </div>
                   </div>
-                  <div className="cart-item-controls">
-                    <button 
-                      className="quantity-btn"
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                    >
-                      -
-                    </button>
-                    <span className="quantity-display">Qty: {item.quantity}</span>
-                    <button 
-                      className="quantity-btn"
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    >
-                      +
-                    </button>
-                    <button 
-                      className="remove-btn"
-                      onClick={() => removeFromCart(item.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                  <div className="cart-item-total">
-                    Total: {effectiveSymbol}{effectiveConvertPrice(item.price * item.quantity)}
-                  </div>
+                );
+              })}
+              
+              <div className="cart-total">
+                <div className="total-amount">
+                  Subtotal ({getTotalItems()} items): {effectiveSymbol}{getConvertedTotalPrice()}
                 </div>
               </div>
-            ))}
-            
-            <div className="cart-total">
-              <div className="total-amount">
-                Subtotal ({getTotalItems()} items): {effectiveSymbol}{getConvertedTotalPrice()}
-              </div>
-            </div>
-            
-            <button 
-              className="amazon-checkout-button"
-              onClick={() => {
-                console.log('Proceed to Checkout clicked');
-                setCurrentPage('checkout');
-                setIsCartOpen(false);
-                navigate('/checkout');
-              }}
-            >
-              Proceed to Checkout
-            </button>
-            
-            <button 
-              className="continue-shopping"
-              onClick={() => setIsCartOpen(false)}
-            >
-              Continue Shopping
-            </button>
-          </>
+              
+              <button 
+                className="amazon-checkout-button"
+                onClick={() => {
+                  console.log('Proceed to Checkout clicked');
+                  setCurrentPage('checkout');
+                  setIsCartOpen(false);
+                  navigate('/checkout');
+                }}
+              >
+                Proceed to Checkout
+              </button>
+              
+              <button 
+                className="continue-shopping"
+                onClick={() => setIsCartOpen(false)}
+              >
+                Continue Shopping
+              </button>
+            </>
+          )
         )}
       </div>
+      
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
 
+// ============================================================================
+// MAIN APP COMPONENT
+// ============================================================================
 function App() {
   const [currentPage, setCurrentPage] = useState('portal');
   const [cart, setCart] = useState([]);
