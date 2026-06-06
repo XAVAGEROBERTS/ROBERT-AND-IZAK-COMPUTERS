@@ -1,8 +1,11 @@
-// src/App.js
+// src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { IonReactRouter } from '@ionic/react-router';
+import { IonRouterOutlet } from '@ionic/react';
+import { Redirect, Route } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import '@ionic/react/css/core.css'; // Import for ionBackButton event
+import { App as CapacitorApp } from '@capacitor/app';
+import '@ionic/react/css/core.css'; // Required for Ionic Router
 import Header from './components/Header';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -45,6 +48,9 @@ const LANGUAGE_STORAGE_KEY = 'robert-izak-computers-language';
 const USER_STORAGE_KEY = 'robert-izak-computers-user';
 const CURRENCY_STORAGE_KEY = 'robert-izak-computers-currency';
 
+// ============================================================================
+// APP CONTENT COMPONENT
+// ============================================================================
 function AppContent({
   currentPage,
   setCurrentPage,
@@ -64,125 +70,12 @@ function AppContent({
   user,
   setUser
 }) {
-  const location = useLocation();
-  const navigate = useNavigate();
   const [currentCurrency, setCurrentCurrency] = useState('UGX');
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // ============================================================================
-  // DISABLE WEBVIEW DEFAULT BACK BEHAVIOR (PREVENTS CONFLICTS)
+  // LOAD CURRENCY FROM LOCALSTORAGE
   // ============================================================================
-  useEffect(() => {
-    if (!isCapacitor()) return;
-
-    // Push an initial state to block WebView's native back
-    history.pushState(null, '', window.location.href);
-
-    const handlePopState = (event) => {
-      // Prevent the default WebView back from happening
-      history.pushState(null, '', window.location.href);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, []);
-
-  // ============================================================================
-  // CAPACITOR BACK BUTTON HANDLER - USING IONIC BACK BUTTON EVENT (PRIORITY BASED)
-  // ============================================================================
-  useEffect(() => {
-    if (!isCapacitor()) return;
-
-    const handleHardwareBack = () => {
-      const pathname = window.location.pathname;
-      console.log('Back button pressed, current path:', pathname);
-
-      // PRIORITY 1: Close cart sidebar if open
-      if (isCartOpen) {
-        setIsCartOpen(false);
-        console.log('Cart sidebar closed');
-        return;
-      }
-
-      // PRIORITY 2: Close any open modals/dialogs
-      const modals = document.querySelectorAll('.modal-open, .dialog-open, [data-modal="open"], [role="dialog"]');
-      if (modals.length > 0) {
-        console.log('Closing modal');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-        return;
-      }
-
-      // PRIORITY 3: Check for popups or dropdowns
-      const popups = document.querySelectorAll('[data-popup="open"], .popup-open, .dropdown-open');
-      if (popups.length > 0) {
-        const closeBtn = document.querySelector('.close-btn, [data-dismiss]');
-        if (closeBtn) closeBtn.click();
-        console.log('Closed popup');
-        return;
-      }
-
-      // PRIORITY 4: Check if we can go back in history
-      const homeRoutes = ['/', '/home', '/portal'];
-      const isHomePage = homeRoutes.includes(pathname);
-
-      if (!isHomePage && window.history.length > 1) {
-        console.log('Navigating back to previous page');
-        window.history.back();
-        return;
-      }
-
-      // PRIORITY 5: Exit the app (only when no other action is possible)
-      console.log('Exiting app');
-      const exitApp = async () => {
-        try {
-          const { App } = await import('@capacitor/app');
-          await App.exitApp();
-        } catch (err) {
-          console.error('Failed to exit app:', err);
-        }
-      };
-      exitApp();
-    };
-
-    // Use the ionBackButton event for better priority handling
-    const handleIonBackButton = (event) => {
-      // Register with high priority (lower number = higher priority)
-      // Priority -1 runs before default handlers
-      event.detail.register(-1, handleHardwareBack);
-    };
-
-    document.addEventListener('ionBackButton', handleIonBackButton);
-
-    return () => {
-      document.removeEventListener('ionBackButton', handleIonBackButton);
-    };
-  }, [isCartOpen, setIsCartOpen]);
-
-  useEffect(() => {
-    console.log('Current URL:', location.pathname);
-    const pathToPage = {
-      '/': 'portal',
-      '/home': 'home',
-      '/products': 'products',
-      '/checkout': 'checkout',
-      '/signin': 'signin',
-      '/admin-signin': 'admin-signin',
-      '/admin-dashboard': 'admin-dashboard',
-      '/confirm-email': 'confirm-email',
-      '/web-development': 'web-development',
-      '/app-development': 'app-development'
-    };
-    const newPage = pathToPage[location.pathname] || 'portal';
-    if (newPage !== currentPage) {
-      console.log(`Updating currentPage to: ${newPage}`);
-      setCurrentPage(newPage);
-    }
-  }, [location, currentPage, setCurrentPage]);
-
-  // Load currency from localStorage
   useEffect(() => {
     const savedCurrency = localStorage.getItem(CURRENCY_STORAGE_KEY);
     if (savedCurrency && ['UGX', 'USD', 'EUR'].includes(savedCurrency)) {
@@ -223,7 +116,7 @@ function AppContent({
   const convertPrice = (priceUSD) => {
     const rate = getExchangeRates()[currentCurrency] || 1;
     const converted = priceUSD * rate;
-    
+
     if (currentCurrency === 'UGX') {
       return Math.round(converted).toLocaleString();
     } else {
@@ -244,7 +137,7 @@ function AppContent({
     setCart(currentCart => {
       const existingItem = currentCart.find(item => item.id === product.id);
       let newCart;
-      
+
       if (existingItem) {
         const newQuantity = existingItem.quantity + (product.quantity || 1);
         newCart = currentCart.map(item =>
@@ -253,21 +146,21 @@ function AppContent({
             : item
         );
       } else {
-        newCart = [...currentCart, { 
-          ...product, 
-          quantity: product.quantity || 1 
+        newCart = [...currentCart, {
+          ...product,
+          quantity: product.quantity || 1
         }];
       }
-      
+
       console.log('New cart after add:', newCart.length, 'items');
-      
+
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newCart));
-      
+
       setTimeout(() => {
         window.dispatchEvent(new Event('cartUpdated'));
         window.dispatchEvent(new Event('storage'));
       }, 100);
-      
+
       return newCart;
     });
   };
@@ -277,14 +170,14 @@ function AppContent({
     setCart(currentCart => {
       const newCart = currentCart.filter(item => item.id !== productId);
       console.log('New cart after remove:', newCart.length, 'items');
-      
+
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newCart));
-      
+
       setTimeout(() => {
         window.dispatchEvent(new Event('cartUpdated'));
         window.dispatchEvent(new Event('storage'));
       }, 100);
-      
+
       return newCart;
     });
   };
@@ -300,14 +193,14 @@ function AppContent({
         item.id === productId ? { ...item, quantity } : item
       );
       console.log('New cart after quantity update:', newCart.length, 'items');
-      
+
       localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newCart));
-      
+
       setTimeout(() => {
         window.dispatchEvent(new Event('cartUpdated'));
         window.dispatchEvent(new Event('storage'));
       }, 100);
-      
+
       return newCart;
     });
   };
@@ -340,19 +233,15 @@ function AppContent({
     setCurrentPage('products');
   };
 
-  const clearSearch = () => {
-    setSearchQuery('');
-  };
-
   const handleSignIn = async (email, password) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
-      
+
       if (error) throw error;
-      
+
       if (data.user) {
         setUser(data.user);
         return data.user;
@@ -368,87 +257,33 @@ function AppContent({
       setUser(null);
       localStorage.removeItem(USER_STORAGE_KEY);
       console.log('User signed out successfully');
-      
-      navigate('/');
-      setCurrentPage('portal');
+      window.location.href = '/';
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
-  const renderPage = () => {
-    console.log('Rendering page:', currentPage);
-    switch (currentPage) {
-      case 'products':
-        return (
-          <Products 
-            addToCart={addToCart} 
-            selectedCategory={selectedCategory}
-            searchQuery={searchQuery}
-            currentLanguage={currentLanguage}
-          />
-        );
-      case 'checkout':
-        return (
-          <Checkout 
-            cart={cart} 
-            clearCart={clearCart} 
-            setCurrentPage={setCurrentPage}
-            currentLanguage={currentLanguage}
-            user={user}
-            currentCurrency={currentCurrency}
-            convertPrice={convertPrice}
-            getCurrencySymbol={getCurrencySymbol}
-          />
-        );
-      case 'signin':
-        return (
-          <>
-            <SignIn currentLanguage={currentLanguage} setUser={setUser} />
-            <SignInFooter currentLanguage={currentLanguage} />
-          </>
-        );
-      case 'admin-signin':
-        return (
-          <>
-            <AdminSignIn currentLanguage={currentLanguage} setUser={setUser} />
-            <SignInFooter currentLanguage={currentLanguage} />
-          </>
-        );
-      case 'admin-dashboard':
-        return <AdminDashboard user={user} setUser={setUser} />;
-      case 'portal':
-        return (
-          <Portal 
-            setCurrentPage={setCurrentPage}
-            setSelectedCategory={setSelectedCategory}
-            currentLanguage={currentLanguage}
-            user={user}
-          />
-        );
-      case 'web-development':
-        return <WebDevelopment currentLanguage={currentLanguage} />;
-      case 'app-development':
-        return <AppDevelopment currentLanguage={currentLanguage} />;
-      default:
-        return (
-          <Home 
-            setCurrentPage={setCurrentPage}
-            setSelectedCategory={setSelectedCategory}
-            handleCategoryChange={handleCategoryChange}
-            currentLanguage={currentLanguage}
-            user={user}
-          />
-        );
-    }
+  const isShopPage = () => {
+    const pathname = window.location.pathname;
+    return pathname.startsWith('/products') ||
+           pathname.startsWith('/checkout') ||
+           pathname.startsWith('/home') ||
+           pathname.startsWith('/product/');
+  };
+
+  const isAuthPage = () => {
+    const pathname = window.location.pathname;
+    return pathname === '/signin' ||
+           pathname === '/admin-signin' ||
+           pathname === '/admin-dashboard';
   };
 
   if (!isLoaded) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
         fontSize: '18px'
       }}>
@@ -457,18 +292,10 @@ function AppContent({
     );
   }
 
-  const isShopPage = location.pathname.startsWith('/products') || 
-                     location.pathname.startsWith('/checkout') || 
-                     location.pathname.startsWith('/home') ||
-                     location.pathname.startsWith('/product/');
-  const isAuthPage = location.pathname === '/signin' || 
-                     location.pathname === '/admin-signin' || 
-                     location.pathname === '/admin-dashboard';
-
   return (
     <div className="App">
-      {isShopPage && !isAuthPage && (
-        <Header 
+      {isShopPage() && !isAuthPage() && (
+        <Header
           currentPage={currentPage}
           setCurrentPage={setCurrentPage}
           cartItemCount={getTotalItems()}
@@ -483,10 +310,95 @@ function AppContent({
           onSignOut={handleSignOut}
         />
       )}
-      
+
       <main>
-        <Routes>
-          <Route path="/customer-service" element={
+        <IonRouterOutlet>
+          <Route exact path="/" render={() => (
+            <Portal
+              setCurrentPage={setCurrentPage}
+              setSelectedCategory={setSelectedCategory}
+              currentLanguage={currentLanguage}
+              user={user}
+            />
+          )} />
+
+          <Route exact path="/home" render={() => (
+            <Home
+              setCurrentPage={setCurrentPage}
+              setSelectedCategory={setSelectedCategory}
+              handleCategoryChange={handleCategoryChange}
+              currentLanguage={currentLanguage}
+              user={user}
+              setUser={setUser}
+              onSignIn={handleSignIn}
+            />
+          )} />
+
+          <Route exact path="/products" render={() => (
+            <Products
+              addToCart={addToCart}
+              selectedCategory={selectedCategory}
+              searchQuery={searchQuery}
+              currentLanguage={currentLanguage}
+              user={user}
+              setUser={setUser}
+              onSignIn={handleSignIn}
+            />
+          )} />
+
+          <Route exact path="/product/:id" render={() => (
+            <ProductDetail
+              addToCart={addToCart}
+              currentCurrency={currentCurrency}
+              convertPrice={convertPrice}
+              getCurrencySymbol={getCurrencySymbol}
+              user={user}
+              setUser={setUser}
+              currentLanguage={currentLanguage}
+              onSignIn={handleSignIn}
+            />
+          )} />
+
+          <Route exact path="/checkout" render={() => (
+            <Checkout
+              cart={cart}
+              clearCart={clearCart}
+              setCurrentPage={setCurrentPage}
+              currentLanguage={currentLanguage}
+              user={user}
+              currentCurrency={currentCurrency}
+              convertPrice={convertPrice}
+              getCurrencySymbol={getCurrencySymbol}
+            />
+          )} />
+
+          <Route exact path="/signin" render={() => (
+            <>
+              <SignIn currentLanguage={currentLanguage} setUser={setUser} />
+              <SignInFooter currentLanguage={currentLanguage} />
+            </>
+          )} />
+
+          <Route exact path="/admin-signin" render={() => (
+            <>
+              <AdminSignIn currentLanguage={currentLanguage} setUser={setUser} />
+              <SignInFooter currentLanguage={currentLanguage} />
+            </>
+          )} />
+
+          <Route exact path="/admin-dashboard" render={() => (
+            <AdminDashboard user={user} setUser={setUser} />
+          )} />
+
+          <Route exact path="/web-development" render={() => (
+            <WebDevelopment currentLanguage={currentLanguage} />
+          )} />
+
+          <Route exact path="/app-development" render={() => (
+            <AppDevelopment currentLanguage={currentLanguage} />
+          )} />
+
+          <Route exact path="/customer-service" render={() => (
             <CustomerServicePage
               user={user}
               onSignOut={handleSignOut}
@@ -496,95 +408,25 @@ function AppContent({
               onCartClick={() => setIsCartOpen(true)}
               setCurrentPage={setCurrentPage}
             />
-          } />
-          <Route path="/" element={
-            <Portal 
-              setCurrentPage={setCurrentPage}
-              setSelectedCategory={setSelectedCategory}
-              currentLanguage={currentLanguage}
-              user={user}
-            />
-          } />
-          <Route path="/home" element={
-            <Home 
-              setCurrentPage={setCurrentPage}
-              setSelectedCategory={setSelectedCategory}
-              handleCategoryChange={handleCategoryChange}
-              currentLanguage={currentLanguage}
-              user={user}
-              setUser={setUser}
-              onSignIn={handleSignIn}
-            />
-          } />
-          <Route path="/products" element={
-            <Products 
-              addToCart={addToCart} 
-              selectedCategory={selectedCategory}
-              searchQuery={searchQuery}
-              currentLanguage={currentLanguage}
-              user={user} 
-              setUser={setUser}
-              onSignIn={handleSignIn} 
-            />
-          } />
-          <Route path="/product/:id" element={
-            <ProductDetail 
-              addToCart={addToCart}
-              currentCurrency={currentCurrency}
-              convertPrice={convertPrice}
-              getCurrencySymbol={getCurrencySymbol}
-              user={user} 
-              setUser={setUser}
-              currentLanguage={currentLanguage}
-              onSignIn={handleSignIn}
-            />
-          } />
-          <Route path="/web-development" element={
-            <WebDevelopment currentLanguage={currentLanguage} />
-          } />
-          <Route path="/app-development" element={
-            <AppDevelopment currentLanguage={currentLanguage} />
-          } />
-          <Route path="/checkout" element={
-            <Checkout 
-              cart={cart} 
-              clearCart={clearCart} 
-              setCurrentPage={setCurrentPage}
-              currentLanguage={currentLanguage}
-              user={user}
-              currentCurrency={currentCurrency}
-              convertPrice={convertPrice}
-              getCurrencySymbol={getCurrencySymbol}
-            />
-          } />
-          <Route path="/signin" element={
-            <>
-              <SignIn currentLanguage={currentLanguage} setUser={setUser} />
-              <SignInFooter currentLanguage={currentLanguage} />
-            </>
-          } />
-          <Route path="/admin-signin" element={
-            <>
-              <AdminSignIn currentLanguage={currentLanguage} setUser={setUser} />
-              <SignInFooter currentLanguage={currentLanguage} />
-            </>
-          } />
-          <Route path="/admin-dashboard" element={<AdminDashboard user={user} setUser={setUser} />} />
-          <Route path="/confirm-email" element={
+          )} />
+
+          <Route exact path="/confirm-email" render={() => (
             <div style={{ padding: '2rem', textAlign: 'center' }}>
               <h2>Please check your email to confirm your account</h2>
               <p>We've sent a confirmation link to your email address.</p>
             </div>
-          } />
-        </Routes>
+          )} />
+
+          <Route exact path="*" render={() => <Redirect to="/" />} />
+        </IonRouterOutlet>
       </main>
 
-      {isShopPage && !isAuthPage && (
+      {isShopPage() && !isAuthPage() && (
         <Footer currentLanguage={currentLanguage} />
       )}
 
-      {isCartOpen && isShopPage && (
-        <CartSidebar 
+      {isCartOpen && isShopPage() && (
+        <CartSidebar
           cart={cart}
           isCartOpen={isCartOpen}
           setIsCartOpen={setIsCartOpen}
@@ -597,7 +439,6 @@ function AppContent({
           getCurrencySymbol={getCurrencySymbol}
           currentCurrency={currentCurrency}
           setCurrentPage={setCurrentPage}
-          navigate={navigate}
         />
       )}
     </div>
@@ -607,20 +448,19 @@ function AppContent({
 // ============================================================================
 // CART SIDEBAR COMPONENT WITH STOCK VALIDATION
 // ============================================================================
-const CartSidebar = ({ 
-  cart, 
-  isCartOpen, 
-  setIsCartOpen, 
-  cartRef, 
-  removeFromCart, 
-  updateQuantity, 
-  getTotalItems, 
+const CartSidebar = ({
+  cart,
+  isCartOpen,
+  setIsCartOpen,
+  cartRef,
+  removeFromCart,
+  updateQuantity,
+  getTotalItems,
   getConvertedTotalPrice,
   convertPrice,
   getCurrencySymbol,
   currentCurrency,
-  setCurrentPage,
-  navigate 
+  setCurrentPage
 }) => {
   const [localCurrency, setLocalCurrency] = useState(currentCurrency);
   const [stockData, setStockData] = useState({});
@@ -639,7 +479,7 @@ const CartSidebar = ({
   // Fetch stock for all cart items
   const fetchStockForCartItems = async () => {
     if (!cart || cart.length === 0) return;
-    
+
     setLoadingStock(true);
     try {
       const productIds = cart.map(item => item.id);
@@ -647,9 +487,9 @@ const CartSidebar = ({
         .from('products')
         .select('id, stock_quantity, name')
         .in('id', productIds);
-      
+
       if (error) throw error;
-      
+
       const stockMap = {};
       data.forEach(product => {
         stockMap[product.id] = {
@@ -657,20 +497,19 @@ const CartSidebar = ({
           name: product.name
         };
       });
-      
+
       setStockData(stockMap);
-      
+
       // Check if any cart item exceeds stock and auto-correct
       for (const item of cart) {
         const stockInfo = stockMap[item.id];
         if (stockInfo && item.quantity > stockInfo.available && stockInfo.available > 0) {
           updateQuantity(item.id, stockInfo.available);
         } else if (stockInfo && stockInfo.available === 0 && item.quantity > 0) {
-          // If out of stock, remove from cart
           removeFromCart(item.id);
         }
       }
-      
+
     } catch (error) {
       console.error('Error fetching stock:', error);
     } finally {
@@ -687,12 +526,12 @@ const CartSidebar = ({
   const handleIncreaseQuantity = async (item) => {
     const currentStock = stockData[item.id]?.available || 0;
     const newQuantity = item.quantity + 1;
-    
+
     if (newQuantity > currentStock) {
       alert(`⚠️ Cannot add more than ${currentStock} of "${item.name}". Only ${currentStock} left in stock!`);
       return;
     }
-    
+
     updateQuantity(item.id, newQuantity);
   };
 
@@ -709,17 +548,22 @@ const CartSidebar = ({
   const effectiveSymbol = getCurrencySymbol();
   const effectiveConvertPrice = convertPrice;
 
+  // Navigation function
+  const navigateTo = (path) => {
+    window.location.href = path;
+  };
+
   return (
     <div className={`cart-overlay ${isCartOpen ? 'open' : ''}`}>
       <div className="cart-sidebar" ref={cartRef}>
         <div className="cart-header">
           <h2>Shopping Cart ({getTotalItems()} items)</h2>
-          <button 
+          <button
             onClick={() => setIsCartOpen(false)}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              fontSize: '1.5rem', 
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '1.5rem',
               cursor: 'pointer',
               color: '#666',
               padding: '5px',
@@ -736,7 +580,7 @@ const CartSidebar = ({
             ×
           </button>
         </div>
-        
+
         {loadingStock && (
           <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
             <div style={{
@@ -751,11 +595,11 @@ const CartSidebar = ({
             Checking stock availability...
           </div>
         )}
-        
+
         {!loadingStock && cart.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <p>Your R&I Cart is empty</p>
-            <button 
+            <button
               className="continue-shopping"
               onClick={() => setIsCartOpen(false)}
             >
@@ -777,18 +621,18 @@ const CartSidebar = ({
               }}>
                 💰 Prices in {effectiveCurrency} • Updates instantly
               </div>
-              
+
               {cart.map(item => {
                 const stockInfo = stockData[item.id];
                 const availableStock = stockInfo?.available || 0;
                 const isLowStock = availableStock <= 5 && availableStock > 0;
                 const isOutOfStock = availableStock === 0;
                 const isAtMaxStock = item.quantity >= availableStock && availableStock > 0;
-                
+
                 return (
                   <div key={item.id} className="cart-item">
-                    <img 
-                      src={item.image_url} 
+                    <img
+                      src={item.image_url}
                       alt={item.name}
                       className="cart-item-image"
                       onError={(e) => {
@@ -800,8 +644,7 @@ const CartSidebar = ({
                       <div className="cart-item-price">
                         {effectiveSymbol}{effectiveConvertPrice(item.price)} each
                       </div>
-                      
-                      {/* Stock Status Indicator */}
+
                       {isOutOfStock && (
                         <div style={{ color: '#e53e3e', fontSize: '12px', marginTop: '4px', fontWeight: '500' }}>
                           ⚠️ OUT OF STOCK - Please remove
@@ -812,9 +655,9 @@ const CartSidebar = ({
                           ⚠️ Only {availableStock} left in stock!
                         </div>
                       )}
-                      
+
                       <div className="cart-item-controls">
-                        <button 
+                        <button
                           className="quantity-btn"
                           onClick={() => handleDecreaseQuantity(item)}
                           disabled={isOutOfStock}
@@ -826,7 +669,7 @@ const CartSidebar = ({
                           -
                         </button>
                         <span className="quantity-display">Qty: {item.quantity}</span>
-                        <button 
+                        <button
                           className="quantity-btn"
                           onClick={() => handleIncreaseQuantity(item)}
                           disabled={isOutOfStock || isAtMaxStock}
@@ -838,7 +681,7 @@ const CartSidebar = ({
                         >
                           +
                         </button>
-                        <button 
+                        <button
                           className="remove-btn"
                           onClick={() => removeFromCart(item.id)}
                         >
@@ -852,26 +695,26 @@ const CartSidebar = ({
                   </div>
                 );
               })}
-              
+
               <div className="cart-total">
                 <div className="total-amount">
                   Subtotal ({getTotalItems()} items): {effectiveSymbol}{getConvertedTotalPrice()}
                 </div>
               </div>
-              
-              <button 
+
+              <button
                 className="amazon-checkout-button"
                 onClick={() => {
                   console.log('Proceed to Checkout clicked');
                   setCurrentPage('checkout');
                   setIsCartOpen(false);
-                  navigate('/checkout');
+                  navigateTo('/checkout');
                 }}
               >
                 Proceed to Checkout
               </button>
-              
-              <button 
+
+              <button
                 className="continue-shopping"
                 onClick={() => setIsCartOpen(false)}
               >
@@ -881,7 +724,7 @@ const CartSidebar = ({
           )
         )}
       </div>
-      
+
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -919,45 +762,30 @@ function App() {
     }
   };
 
-  // Load user, cart, and language from localStorage on component mount
+  // Load data from localStorage on mount
   useEffect(() => {
     console.log('Loading data from localStorage...');
     try {
-      // Load user data with safe parsing
       const savedUser = localStorage.getItem(USER_STORAGE_KEY);
-      console.log('Raw user data from localStorage:', savedUser);
-      
       const parsedUser = safeJSONParse(savedUser, null);
       if (parsedUser && parsedUser.id) {
-        console.log('Setting user from localStorage:', parsedUser.email);
         setUser(parsedUser);
       } else {
-        console.log('No valid user data found in localStorage');
         setUser(null);
       }
 
-      // Load cart data with safe parsing
       const savedCart = localStorage.getItem(CART_STORAGE_KEY);
-      console.log('Raw cart data from localStorage:', savedCart);
-      
       const parsedCart = safeJSONParse(savedCart, []);
       if (Array.isArray(parsedCart) && parsedCart.length > 0) {
-        console.log('Setting cart with', parsedCart.length, 'items');
         setCart(parsedCart);
       } else {
-        console.log('No valid cart data found in localStorage, setting empty array');
         setCart([]);
       }
 
-      // Load language data (no parsing needed as it's a string)
       const savedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-      console.log('Loading language from localStorage:', savedLanguage);
-      
       if (savedLanguage && ['en', 'es', 'fr'].includes(savedLanguage)) {
-        console.log('Setting language to:', savedLanguage);
         setCurrentLanguage(savedLanguage);
       } else {
-        console.log('Using default language: en');
         setCurrentLanguage('en');
       }
     } catch (error) {
@@ -970,46 +798,39 @@ function App() {
     }
   }, []);
 
-  // Save user to localStorage whenever user changes
+  // Save user to localStorage
   useEffect(() => {
     if (isLoaded) {
-      console.log('Saving user to localStorage:', user);
       try {
         if (user && user.id) {
           localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-          console.log('User saved successfully!');
         } else {
           localStorage.removeItem(USER_STORAGE_KEY);
-          console.log('User cleared from localStorage');
         }
       } catch (error) {
-        console.error('Error saving user to localStorage:', error);
+        console.error('Error saving user:', error);
       }
     }
   }, [user, isLoaded]);
 
-  // Save cart to localStorage whenever cart changes
+  // Save cart to localStorage
   useEffect(() => {
     if (isLoaded) {
-      console.log('Saving cart to localStorage:', cart);
       try {
         localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
-        console.log('Cart saved successfully! Items:', cart.length);
       } catch (error) {
-        console.error('Error saving cart to localStorage:', error);
+        console.error('Error saving cart:', error);
       }
     }
   }, [cart, isLoaded]);
 
-  // Save language to localStorage whenever it changes
+  // Save language to localStorage
   useEffect(() => {
     if (isLoaded) {
-      console.log('Saving language to localStorage:', currentLanguage);
       try {
         localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
-        console.log('Language saved successfully!');
       } catch (error) {
-        console.error('Error saving language to localStorage:', error);
+        console.error('Error saving language:', error);
       }
     }
   }, [currentLanguage, isLoaded]);
@@ -1031,11 +852,55 @@ function App() {
     };
   }, [isCartOpen]);
 
+  // ============================================================================
+  // CAPACITOR BACK BUTTON HANDLER - EMPTY LISTENER (IonRouterOutlet handles navigation)
+  // ============================================================================
+  useEffect(() => {
+    if (!isCapacitor()) return;
+
+    let backButtonHandler;
+
+    const setupBackHandler = async () => {
+      try {
+        backButtonHandler = await CapacitorApp.addListener('backButton', () => {
+          // This empty listener is crucial.
+          // It prevents Capacitor from firing its own default behavior
+          // and gives full control to the IonRouterOutlet.
+          console.log('Back button pressed, Ionic Router will handle the navigation.');
+        });
+      } catch (error) {
+        console.log('Back button handler setup failed:', error);
+      }
+    };
+
+    setupBackHandler();
+
+    return () => {
+      if (backButtonHandler) {
+        backButtonHandler.remove();
+      }
+    };
+  }, []);
+
+  if (!isLoaded) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        fontSize: '18px'
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
   return (
     <HelmetProvider>
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-        <BrowserRouter>
-          <AppContent 
+        <IonReactRouter>
+          <AppContent
             currentPage={currentPage}
             setCurrentPage={setCurrentPage}
             cart={cart}
@@ -1054,7 +919,7 @@ function App() {
             user={user}
             setUser={setUser}
           />
-        </BrowserRouter>
+        </IonReactRouter>
       </GoogleOAuthProvider>
     </HelmetProvider>
   );
