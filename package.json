@@ -15,7 +15,6 @@
     "@capacitor/cli": "^7.6.6",
     "@capacitor/core": "^7.6.6",
     "@capacitor/ios": "^7.4.4",
-    "@capgo/capacitor-social-login": "^7.4.7",
     "@ionic/react": "^7.0.0",
     "@ionic/react-router": "^7.0.0",
     "@react-oauth/google": "^0.13.4",
