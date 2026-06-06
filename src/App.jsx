@@ -21,6 +21,14 @@ import WebDevelopment from './pages/WebDevelopment';
 import AppDevelopment from './pages/AppDevelopment';
 
 // ============================================================================
+// CAPACITOR BACK BUTTON HANDLER
+// ============================================================================
+// Check if we're running in Capacitor (mobile app) environment
+const isCapacitor = () => {
+  return window.Capacitor !== undefined;
+};
+
+// ============================================================================
 // VITE ENVIRONMENT VARIABLES
 // ============================================================================
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID_HERE';
@@ -36,19 +44,19 @@ const LANGUAGE_STORAGE_KEY = 'robert-izak-computers-language';
 const USER_STORAGE_KEY = 'robert-izak-computers-user';
 const CURRENCY_STORAGE_KEY = 'robert-izak-computers-currency';
 
-function AppContent({ 
-  currentPage, 
-  setCurrentPage, 
-  cart, 
-  setCart, 
-  isCartOpen, 
-  setIsCartOpen, 
-  isLoaded, 
-  setIsLoaded, 
-  selectedCategory, 
-  setSelectedCategory, 
-  searchQuery, 
-  setSearchQuery, 
+function AppContent({
+  currentPage,
+  setCurrentPage,
+  cart,
+  setCart,
+  isCartOpen,
+  setIsCartOpen,
+  isLoaded,
+  setIsLoaded,
+  selectedCategory,
+  setSelectedCategory,
+  searchQuery,
+  setSearchQuery,
   cartRef,
   currentLanguage,
   setCurrentLanguage,
@@ -59,6 +67,80 @@ function AppContent({
   const navigate = useNavigate();
   const [currentCurrency, setCurrentCurrency] = useState('UGX');
   const [forceUpdate, setForceUpdate] = useState(0);
+
+  // ============================================================================
+  // CAPACITOR BACK BUTTON LISTENER - ADDED WITHOUT CHANGING EXISTING LOGIC
+  // ============================================================================
+  useEffect(() => {
+    // Only run this code in Capacitor (mobile app) environment
+    if (!isCapacitor()) return;
+
+    // Dynamically import Capacitor App module (won't break web version)
+    let backButtonListener = null;
+
+    const setupBackButtonHandler = async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+
+        const handleBackButton = () => {
+          // Get current pathname
+          const pathname = location.pathname;
+
+          // Check if cart sidebar is open - close it first
+          if (isCartOpen) {
+            setIsCartOpen(false);
+            return;
+          }
+
+          // Check for any open modals or dialogs (you can expand this)
+          const modals = document.querySelectorAll('.modal-open, .dialog-open, [data-modal="open"]');
+          if (modals.length > 0) {
+            // Close modals by dispatching escape event or custom close
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+            return;
+          }
+
+          // Define routes that are considered "home" or landing pages
+          const homeRoutes = ['/', '/home', '/portal'];
+          const isHomePage = homeRoutes.includes(pathname);
+
+          // Define checkout and critical pages - on these pages, back should work normally
+          const criticalRoutes = ['/checkout', '/signin', '/admin-signin'];
+          const isCriticalPage = criticalRoutes.includes(pathname);
+
+          if (isCriticalPage && !isHomePage) {
+            // On critical pages, navigate back in history first
+            if (window.history.length > 1) {
+              navigate(-1);
+            } else {
+              App.exitApp();
+            }
+          } else if (!isHomePage && window.history.length > 1) {
+            // Not on home page, go back in history
+            navigate(-1);
+          } else {
+            // On home page or no history, exit the app
+            App.exitApp();
+          }
+        };
+
+        // Add the back button listener
+        backButtonListener = await App.addListener('backButton', handleBackButton);
+
+      } catch (error) {
+        console.log('Capacitor back button handler not loaded (running in web mode):', error.message);
+      }
+    };
+
+    setupBackButtonHandler();
+
+    // Clean up the listener when component unmounts
+    return () => {
+      if (backButtonListener && typeof backButtonListener.remove === 'function') {
+        backButtonListener.remove();
+      }
+    };
+  }, [location.pathname, navigate, isCartOpen, setIsCartOpen]);
 
   useEffect(() => {
     console.log('Current URL:', location.pathname);

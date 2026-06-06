@@ -1,5 +1,3 @@
-
-
 {
   "name": "robert-izak-computers",
   "private": true,
@@ -13,8 +11,8 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.4.4",
-    "@capacitor/cli": "^7.4.4",
-    "@capacitor/core": "^7.4.4",
+    "@capacitor/cli": "^7.6.6",
+    "@capacitor/core": "^7.6.6",
     "@capacitor/ios": "^7.4.4",
     "@react-oauth/google": "^0.13.4",
     "@supabase/supabase-js": "^2.76.1",
@@ -30,6 +28,7 @@
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.1.1",
+    "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^8.53.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -37,5 +36,3 @@
     "vite": "^7.1.12"
   }
 }
-
-

@@ -1,0 +1,9 @@
+﻿{
+  "appId": "com.robertizak.computers",
+  "appName": "RobertIzakComputers",
+  "webDir": "www",
+  "server": {
+    "url": "https://robert-and-izak-computers.vercel.app",
+    "cleartext": false
+  }
+}
