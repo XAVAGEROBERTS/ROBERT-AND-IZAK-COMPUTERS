@@ -298,13 +298,15 @@ const SignIn = ({ currentLanguage, setUser }) => {
   // ============================================================================
   // MAIN GOOGLE SIGN-IN HANDLER (Chooses native vs web)
   // ============================================================================
-  const handleGoogleSignIn = () => {
-    if (isNative) {
-      handleNativeGoogleSignIn();
-    } else {
-      handleWebGoogleSignIn();
-    }
-  };
+ const handleGoogleSignIn = () => {
+  console.log('=== GOOGLE SIGN-IN BUTTON CLICKED ===');
+  console.log('isNative:', isNative);
+  if (isNative) {
+    handleNativeGoogleSignIn();
+  } else {
+    handleWebGoogleSignIn();
+  }
+};
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
