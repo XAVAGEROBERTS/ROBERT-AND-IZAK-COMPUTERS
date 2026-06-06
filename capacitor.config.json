@@ -1,0 +1,17 @@
+{
+  "appId": "com.robertizak.computers",
+  "appName": "Robert&IzakComputers",
+  "webDir": "www",
+  "server": {
+    "url": "https://robert-and-izak-computers.vercel.app",
+    "cleartext": false
+  },
+  "plugins": {
+    "CapacitorSocialLogin": {
+      "google": {
+        "webClientId": "555155405819-khnae74ftcq50t32f8i6u4bd7fbag5k2.apps.googleusercontent.com",
+        "androidClientId": "555155405819-41njae3p75ub92897gkrop1jqq7kj1hp.apps.googleusercontent.com"
+      }
+    }
+  }
+}

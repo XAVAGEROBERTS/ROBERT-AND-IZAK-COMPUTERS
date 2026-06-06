@@ -1,8 +1,12 @@
 // src/pages/SignIn.js
 import React, { useState, useEffect } from 'react';
-import { authenticateCustomer, registerCustomer, signInWithGoogle } from '../utils/auth';
+import { authenticateCustomer, registerCustomer } from '../utils/auth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useGoogleLogin } from '@react-oauth/google';
+import { Capacitor } from '@capacitor/core';
+import { SocialLogin } from '@capgo/capacitor-social-login';
+
+// Check if running on mobile (Capacitor) or web
+const isNative = Capacitor.isNativePlatform();
 
 const SignIn = ({ currentLanguage, setUser }) => {
   const [email, setEmail] = useState('');
@@ -20,27 +24,27 @@ const SignIn = ({ currentLanguage, setUser }) => {
   });
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [redirectPath, setRedirectPath] = useState('/home');
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const action = urlParams.get('action');
     const redirect = urlParams.get('redirect');
-    
+
     if (action === 'signup') {
       setIsSignUp(true);
     } else {
       setIsSignUp(false);
     }
-    
+
     if (redirect) {
       setRedirectPath(redirect);
     }
-    
+
     setTimeout(() => {
-      const cleanUrl = redirect ? 
-        `${window.location.pathname}?redirect=${encodeURIComponent(redirect)}` : 
+      const cleanUrl = redirect ?
+        `${window.location.pathname}?redirect=${encodeURIComponent(redirect)}` :
         window.location.pathname;
       window.history.replaceState({}, '', cleanUrl);
     }, 100);
@@ -126,30 +130,30 @@ const SignIn = ({ currentLanguage, setUser }) => {
 
   const checkDarkTheme = () => {
     const now = new Date();
-    
+
     const eatOffset = 3 * 60;
     const localOffset = now.getTimezoneOffset();
     const eatTime = new Date(now.getTime() + (localOffset + eatOffset) * 60000);
-    
+
     const hours = eatTime.getHours();
     const minutes = eatTime.getMinutes();
     const totalMinutes = hours * 60 + minutes;
-    
+
     const eveningStart = 18 * 60 + 30;
     const morningEnd = 8 * 60;
-    
+
     const isDark = totalMinutes >= eveningStart || totalMinutes < morningEnd;
-    
+
     return isDark;
   };
 
   useEffect(() => {
     setIsDarkTheme(checkDarkTheme());
-    
+
     const interval = setInterval(() => {
       setIsDarkTheme(checkDarkTheme());
     }, 60000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
@@ -168,7 +172,7 @@ const SignIn = ({ currentLanguage, setUser }) => {
 
       if (isSignUp) {
         result = await registerCustomer(email, password, userData);
-        
+
         if (result.success) {
           const signInResult = await authenticateCustomer(email, password);
           if (signInResult.success) {
@@ -192,7 +196,7 @@ const SignIn = ({ currentLanguage, setUser }) => {
         }
       } else {
         result = await authenticateCustomer(email, password);
-        
+
         if (result.success) {
           const user = {
             id: result.customer.id,
@@ -218,44 +222,82 @@ const SignIn = ({ currentLanguage, setUser }) => {
     }
   };
 
-  const handleGoogleSignIn = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setGoogleLoading(true);
-      setError(null);
-      
-      try {
-        const result = await signInWithGoogle(tokenResponse.access_token);
-        
-        if (result.success) {
+  // ============================================================================
+  // NATIVE GOOGLE SIGN-IN FOR CAPACITOR (Mobile)
+  // ============================================================================
+  const handleNativeGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setError(null);
+
+    try {
+      // Initialize SocialLogin
+      await SocialLogin.initialize();
+
+      // Perform Google login
+      const result = await SocialLogin.login({
+        provider: 'google',
+        scopes: ['profile', 'email']
+      });
+
+      console.log('Google Sign-In result:', result);
+
+      if (result && result.idToken) {
+        // Send the ID token to your backend/Supabase
+        const response = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken: result.idToken })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
           const user = {
-            id: result.user.id,
-            email: result.user.email,
+            id: data.user.id,
+            email: data.user.email,
             user_metadata: {
-              first_name: result.user.first_name,
-              last_name: result.user.last_name,
-              picture: result.user.picture
+              first_name: data.user.first_name || result.givenName,
+              last_name: data.user.last_name || result.familyName,
+              picture: result.imageUrl
             },
             isAdmin: false
           };
           setUser(user);
           navigate(redirectPath || '/home');
         } else {
-          throw new Error(result.error);
+          throw new Error(data.error || 'Google sign-in failed');
         }
-      } catch (err) {
-        setError(err.message);
-        console.error('Google sign-in error:', err);
-      } finally {
-        setGoogleLoading(false);
+      } else {
+        throw new Error('No ID token received from Google');
       }
-    },
-    onError: (error) => {
-      console.error('Google Sign-In Error:', error);
-      setError('Google sign-in failed. Please try again.');
-    },
-    flow: 'implicit',
-    scope: 'openid email profile',
-  });
+
+    } catch (err) {
+      console.error('Native Google Sign-In error:', err);
+      setError(err.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // ============================================================================
+  // WEB GOOGLE SIGN-IN (Fallback for browser)
+  // ============================================================================
+  const handleWebGoogleSignIn = () => {
+    // For web, you need to keep your existing Google OAuth flow
+    // This should use @react-oauth/google
+    setError('Web Google Sign-In requires additional setup. Please use email sign-in for now.');
+  };
+
+  // ============================================================================
+  // MAIN GOOGLE SIGN-IN HANDLER (Chooses native vs web)
+  // ============================================================================
+  const handleGoogleSignIn = () => {
+    if (isNative) {
+      handleNativeGoogleSignIn();
+    } else {
+      handleWebGoogleSignIn();
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -317,44 +359,43 @@ const SignIn = ({ currentLanguage, setUser }) => {
   const currentTheme = isDarkTheme ? themeStyles.dark : themeStyles.light;
 
   return (
-    <div style={{ 
-      height: '100vh', // Changed from minHeight to fixed height
-      display: 'flex', 
+    <div style={{
+      height: '100vh',
+      display: 'flex',
       flexDirection: 'column',
       background: currentTheme.background,
       transition: 'background 0.3s ease',
-      overflow: 'hidden' // Prevent scrolling
+      overflow: 'hidden'
     }}>
-      {/* Main content - takes remaining space */}
       <div style={{
         flex: 1,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '10px', // Reduced padding
-        overflowY: 'auto' // Allow scrolling ONLY if content overflows
+        padding: '10px',
+        overflowY: 'auto'
       }}>
         <div style={{
           background: currentTheme.cardBackground,
-          padding: isSignUp ? '20px' : '30px', // Smaller padding for signup
+          padding: isSignUp ? '20px' : '30px',
           borderRadius: '8px',
           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
           width: '100%',
-          maxWidth: '400px', // Slightly smaller max width
+          maxWidth: '400px',
           border: `1px solid ${currentTheme.borderColor}`,
           transition: 'all 0.3s ease'
         }}>
           <div style={{ textAlign: 'center', marginBottom: isSignUp ? '15px' : '20px' }}>
-            <h2 style={{ 
-              color: currentTheme.textColor, 
+            <h2 style={{
+              color: currentTheme.textColor,
               marginBottom: '5px',
-              fontSize: isSignUp ? '22px' : '24px', // Smaller font for signup
+              fontSize: isSignUp ? '22px' : '24px',
               fontWeight: 'bold'
             }}>
               {t('title')}
             </h2>
-            <p style={{ 
-              color: currentTheme.secondaryText, 
+            <p style={{
+              color: currentTheme.secondaryText,
               fontSize: '16px',
               fontWeight: '500'
             }}>
@@ -366,7 +407,7 @@ const SignIn = ({ currentLanguage, setUser }) => {
             <div style={{
               background: currentTheme.errorBackground,
               color: isDarkTheme ? '#fc8181' : '#c33',
-              padding: '8px', // Smaller padding
+              padding: '8px',
               borderRadius: '4px',
               marginBottom: '15px',
               fontSize: '13px',
@@ -397,7 +438,7 @@ const SignIn = ({ currentLanguage, setUser }) => {
                     placeholder={t('firstName')}
                     style={{
                       width: '100%',
-                      padding: '8px', // Smaller padding
+                      padding: '8px',
                       border: `1px solid ${currentTheme.inputBorder}`,
                       borderRadius: '4px',
                       fontSize: '13px',
@@ -531,10 +572,10 @@ const SignIn = ({ currentLanguage, setUser }) => {
                 </button>
               </div>
               {isSignUp && (
-                <p style={{ 
-                  fontSize: '11px', 
-                  color: currentTheme.secondaryText, 
-                  marginTop: '3px' 
+                <p style={{
+                  fontSize: '11px',
+                  color: currentTheme.secondaryText,
+                  marginTop: '3px'
                 }}>
                   Min 6 characters
                 </p>
@@ -547,10 +588,10 @@ const SignIn = ({ currentLanguage, setUser }) => {
               style={{
                 width: '100%',
                 padding: '10px',
-                background: loading || (isSignUp && password.length < 6) 
-                  ? (isDarkTheme ? '#4a5568' : '#ccc') 
+                background: loading || (isSignUp && password.length < 6)
+                  ? (isDarkTheme ? '#4a5568' : '#ccc')
                   : currentTheme.buttonBackground,
-                color: loading || (isSignUp && password.length < 6) 
+                color: loading || (isSignUp && password.length < 6)
                   ? (isDarkTheme ? '#a0aec0' : '#666')
                   : currentTheme.buttonColor,
                 border: 'none',
@@ -599,10 +640,10 @@ const SignIn = ({ currentLanguage, setUser }) => {
               }} />
             </div>
 
-            {/* Google Button */}
+            {/* Google Button - Works on both Mobile and Web */}
             <button
               type="button"
-              onClick={() => handleGoogleSignIn()}
+              onClick={handleGoogleSignIn}
               disabled={googleLoading}
               style={{
                 width: '100%',
@@ -657,8 +698,8 @@ const SignIn = ({ currentLanguage, setUser }) => {
           </form>
 
           {/* Toggle button */}
-          <div style={{ 
-            marginTop: '15px', 
+          <div style={{
+            marginTop: '15px',
             textAlign: 'center',
             fontSize: '12px'
           }}>
@@ -682,7 +723,7 @@ const SignIn = ({ currentLanguage, setUser }) => {
         </div>
       </div>
 
-      {/* Footer - fixed at bottom */}
+      {/* Footer */}
       <footer style={{
         textAlign: 'center',
         padding: '12px 0',
@@ -692,7 +733,7 @@ const SignIn = ({ currentLanguage, setUser }) => {
         color: currentTheme.footerText,
         transition: 'all 0.3s ease',
         width: '100%',
-        flexShrink: 0 // Prevent footer from shrinking
+        flexShrink: 0
       }}>
         <div style={{ marginBottom: '5px' }}>
           <a 
