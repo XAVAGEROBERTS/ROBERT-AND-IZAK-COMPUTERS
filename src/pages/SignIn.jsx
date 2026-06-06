@@ -8,6 +8,9 @@ import { SocialLogin } from '@capgo/capacitor-social-login';
 // Check if running on mobile (Capacitor) or web
 const isNative = Capacitor.isNativePlatform();
 
+// Your Google Web Client ID - from capacitor.config.json
+const GOOGLE_WEB_CLIENT_ID = "555155405819-khnae74ftcq50t32f8i6u4bd7fbag5k2.apps.googleusercontent.com";
+
 const SignIn = ({ currentLanguage, setUser }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -230,8 +233,12 @@ const SignIn = ({ currentLanguage, setUser }) => {
     setError(null);
 
     try {
-      // Initialize SocialLogin
-      await SocialLogin.initialize();
+      // Initialize SocialLogin with your webClientId (CRITICAL FIX)
+      await SocialLogin.initialize({
+        google: {
+          webClientId: GOOGLE_WEB_CLIENT_ID
+        }
+      });
 
       // Perform Google login
       const result = await SocialLogin.login({
