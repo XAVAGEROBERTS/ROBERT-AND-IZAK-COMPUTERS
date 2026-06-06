@@ -69,7 +69,28 @@ function AppContent({
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // ============================================================================
-  // FIXED: PRIORITY-BASED CAPACITOR BACK BUTTON HANDLER
+  // DISABLE WEBVIEW DEFAULT BACK BEHAVIOR (PREVENTS CONFLICTS)
+  // ============================================================================
+  useEffect(() => {
+    if (!isCapacitor()) return;
+
+    // Push an initial state to block WebView's native back
+    history.pushState(null, '', window.location.href);
+
+    const handlePopState = (event) => {
+      // Prevent the default WebView back from happening
+      history.pushState(null, '', window.location.href);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  // ============================================================================
+  // CAPACITOR BACK BUTTON LISTENER - PRIORITY BASED
   // ============================================================================
   useEffect(() => {
     // Only run this code in Capacitor (mobile app) environment
@@ -85,40 +106,35 @@ function AppContent({
           // Get current pathname
           const pathname = window.location.pathname;
 
+          console.log('Back button pressed, current path:', pathname);
+
           // PRIORITY 1: Close cart sidebar if open
           if (isCartOpen) {
             setIsCartOpen(false);
+            console.log('Cart sidebar closed');
             return;
           }
 
-          // PRIORITY 2: Close any open modals/dialogs
+          // PRIORITY 2: Close any open modals or dialogs
           const modals = document.querySelectorAll('.modal-open, .dialog-open, [data-modal="open"], [role="dialog"]');
           if (modals.length > 0) {
-            // Try to close by dispatching Escape event
+            console.log('Closing modal');
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
             return;
           }
 
-          // PRIORITY 3: Check for popups or dropdowns
-          const popups = document.querySelectorAll('[data-popup="open"], .popup-open, .dropdown-open');
-          if (popups.length > 0) {
-            // Simulate clicking close button or backdrop
-            const closeBtn = document.querySelector('.close-btn, [data-dismiss]');
-            if (closeBtn) closeBtn.click();
-            return;
-          }
-
-          // PRIORITY 4: Navigate back in browser history if not on home page
+          // PRIORITY 3: Navigate back in browser history if not on home page
           const homeRoutes = ['/', '/home', '/portal'];
           const isHomePage = homeRoutes.includes(pathname);
 
           if (!isHomePage && window.history.length > 1) {
-            // Go back to previous page
+            console.log('Navigating back to previous page');
             window.history.back();
             return;
           }
 
-          // PRIORITY 5: Exit the app (only when no other action is possible)
+          // PRIORITY 4: Exit the app (only when no other action is possible)
+          console.log('Exiting app');
           App.exitApp();
         };
 
@@ -127,7 +143,7 @@ function AppContent({
         console.log('Capacitor back button handler registered successfully');
 
       } catch (error) {
-        console.log('Capacitor back button handler not loaded (running in web mode):', error.message);
+        console.log('Capacitor back button handler not loaded:', error.message);
       }
     };
 
@@ -140,7 +156,7 @@ function AppContent({
         console.log('Capacitor back button handler removed');
       }
     };
-  }, [isCartOpen, setIsCartOpen]); // Only depends on cart state, not on location or navigate
+  }, [isCartOpen, setIsCartOpen]); // Only depends on cart state
 
   useEffect(() => {
     console.log('Current URL:', location.pathname);
