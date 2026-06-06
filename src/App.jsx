@@ -69,13 +69,12 @@ function AppContent({
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // ============================================================================
-  // CAPACITOR BACK BUTTON LISTENER - ADDED WITHOUT CHANGING EXISTING LOGIC
+  // FIXED: PRIORITY-BASED CAPACITOR BACK BUTTON HANDLER
   // ============================================================================
   useEffect(() => {
     // Only run this code in Capacitor (mobile app) environment
     if (!isCapacitor()) return;
 
-    // Dynamically import Capacitor App module (won't break web version)
     let backButtonListener = null;
 
     const setupBackButtonHandler = async () => {
@@ -84,48 +83,48 @@ function AppContent({
 
         const handleBackButton = () => {
           // Get current pathname
-          const pathname = location.pathname;
+          const pathname = window.location.pathname;
 
-          // Check if cart sidebar is open - close it first
+          // PRIORITY 1: Close cart sidebar if open
           if (isCartOpen) {
             setIsCartOpen(false);
             return;
           }
 
-          // Check for any open modals or dialogs (you can expand this)
-          const modals = document.querySelectorAll('.modal-open, .dialog-open, [data-modal="open"]');
+          // PRIORITY 2: Close any open modals/dialogs
+          const modals = document.querySelectorAll('.modal-open, .dialog-open, [data-modal="open"], [role="dialog"]');
           if (modals.length > 0) {
-            // Close modals by dispatching escape event or custom close
+            // Try to close by dispatching Escape event
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
             return;
           }
 
-          // Define routes that are considered "home" or landing pages
+          // PRIORITY 3: Check for popups or dropdowns
+          const popups = document.querySelectorAll('[data-popup="open"], .popup-open, .dropdown-open');
+          if (popups.length > 0) {
+            // Simulate clicking close button or backdrop
+            const closeBtn = document.querySelector('.close-btn, [data-dismiss]');
+            if (closeBtn) closeBtn.click();
+            return;
+          }
+
+          // PRIORITY 4: Navigate back in browser history if not on home page
           const homeRoutes = ['/', '/home', '/portal'];
           const isHomePage = homeRoutes.includes(pathname);
 
-          // Define checkout and critical pages - on these pages, back should work normally
-          const criticalRoutes = ['/checkout', '/signin', '/admin-signin'];
-          const isCriticalPage = criticalRoutes.includes(pathname);
-
-          if (isCriticalPage && !isHomePage) {
-            // On critical pages, navigate back in history first
-            if (window.history.length > 1) {
-              navigate(-1);
-            } else {
-              App.exitApp();
-            }
-          } else if (!isHomePage && window.history.length > 1) {
-            // Not on home page, go back in history
-            navigate(-1);
-          } else {
-            // On home page or no history, exit the app
-            App.exitApp();
+          if (!isHomePage && window.history.length > 1) {
+            // Go back to previous page
+            window.history.back();
+            return;
           }
+
+          // PRIORITY 5: Exit the app (only when no other action is possible)
+          App.exitApp();
         };
 
         // Add the back button listener
         backButtonListener = await App.addListener('backButton', handleBackButton);
+        console.log('Capacitor back button handler registered successfully');
 
       } catch (error) {
         console.log('Capacitor back button handler not loaded (running in web mode):', error.message);
@@ -138,9 +137,10 @@ function AppContent({
     return () => {
       if (backButtonListener && typeof backButtonListener.remove === 'function') {
         backButtonListener.remove();
+        console.log('Capacitor back button handler removed');
       }
     };
-  }, [location.pathname, navigate, isCartOpen, setIsCartOpen]);
+  }, [isCartOpen, setIsCartOpen]); // Only depends on cart state, not on location or navigate
 
   useEffect(() => {
     console.log('Current URL:', location.pathname);
