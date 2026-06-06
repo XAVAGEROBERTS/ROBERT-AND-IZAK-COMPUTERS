@@ -11,6 +11,11 @@ const isNative = Capacitor.isNativePlatform();
 // Your Google Web Client ID - from capacitor.config.json
 const GOOGLE_WEB_CLIENT_ID = "555155405819-khnae74ftcq50t32f8i6u4bd7fbag5k2.apps.googleusercontent.com";
 
+// Debug: Log platform info
+console.log('=== SIGNIN COMPONENT LOADED ===');
+console.log('isNative:', isNative);
+console.log('Capacitor platform:', Capacitor.getPlatform());
+
 const SignIn = ({ currentLanguage, setUser }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,6 +36,7 @@ const SignIn = ({ currentLanguage, setUser }) => {
   const [redirectPath, setRedirectPath] = useState('/home');
 
   useEffect(() => {
+    console.log('SignIn component mounted');
     const urlParams = new URLSearchParams(window.location.search);
     const action = urlParams.get('action');
     const redirect = urlParams.get('redirect');
@@ -229,18 +235,22 @@ const SignIn = ({ currentLanguage, setUser }) => {
   // NATIVE GOOGLE SIGN-IN FOR CAPACITOR (Mobile)
   // ============================================================================
   const handleNativeGoogleSignIn = async () => {
+    console.log('=== handleNativeGoogleSignIn STARTED ===');
     setGoogleLoading(true);
     setError(null);
 
     try {
-      // Initialize SocialLogin with your webClientId (CRITICAL FIX)
+      console.log('Initializing SocialLogin with webClientId:', GOOGLE_WEB_CLIENT_ID);
+      // Initialize SocialLogin with your webClientId
       await SocialLogin.initialize({
         google: {
           webClientId: GOOGLE_WEB_CLIENT_ID
         }
       });
+      console.log('SocialLogin initialized successfully');
 
       // Perform Google login
+      console.log('Calling SocialLogin.login...');
       const result = await SocialLogin.login({
         provider: 'google',
         scopes: ['profile', 'email']
@@ -290,23 +300,30 @@ const SignIn = ({ currentLanguage, setUser }) => {
   // WEB GOOGLE SIGN-IN (Fallback for browser)
   // ============================================================================
   const handleWebGoogleSignIn = () => {
-    // For web, you need to keep your existing Google OAuth flow
-    // This should use @react-oauth/google
+    console.log('=== handleWebGoogleSignIn called ===');
     setError('Web Google Sign-In requires additional setup. Please use email sign-in for now.');
   };
 
   // ============================================================================
   // MAIN GOOGLE SIGN-IN HANDLER (Chooses native vs web)
   // ============================================================================
- const handleGoogleSignIn = () => {
-  console.log('=== GOOGLE SIGN-IN BUTTON CLICKED ===');
-  console.log('isNative:', isNative);
-  if (isNative) {
-    handleNativeGoogleSignIn();
-  } else {
-    handleWebGoogleSignIn();
-  }
-};
+  const handleGoogleSignIn = () => {
+    console.log('=== GOOGLE SIGN-IN BUTTON CLICKED ===');
+    console.log('isNative:', isNative);
+    console.log('googleLoading:', googleLoading);
+    console.log('Capacitor platform:', Capacitor.getPlatform());
+
+    // Show an alert to confirm the button was clicked (temporary debug)
+    window.alert('Google Sign-In button clicked! Check console for details.');
+
+    if (isNative) {
+      console.log('Calling handleNativeGoogleSignIn...');
+      handleNativeGoogleSignIn();
+    } else {
+      console.log('Calling handleWebGoogleSignIn...');
+      handleWebGoogleSignIn();
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
