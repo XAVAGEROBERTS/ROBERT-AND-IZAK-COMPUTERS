@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import '@ionic/react/css/core.css'; // Import for ionBackButton event
 import Header from './components/Header';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -90,73 +91,75 @@ function AppContent({
   }, []);
 
   // ============================================================================
-  // CAPACITOR BACK BUTTON LISTENER - PRIORITY BASED
+  // CAPACITOR BACK BUTTON HANDLER - USING IONIC BACK BUTTON EVENT (PRIORITY BASED)
   // ============================================================================
   useEffect(() => {
-    // Only run this code in Capacitor (mobile app) environment
     if (!isCapacitor()) return;
 
-    let backButtonListener = null;
+    const handleHardwareBack = () => {
+      const pathname = window.location.pathname;
+      console.log('Back button pressed, current path:', pathname);
 
-    const setupBackButtonHandler = async () => {
-      try {
-        const { App } = await import('@capacitor/app');
-
-        const handleBackButton = () => {
-          // Get current pathname
-          const pathname = window.location.pathname;
-
-          console.log('Back button pressed, current path:', pathname);
-
-          // PRIORITY 1: Close cart sidebar if open
-          if (isCartOpen) {
-            setIsCartOpen(false);
-            console.log('Cart sidebar closed');
-            return;
-          }
-
-          // PRIORITY 2: Close any open modals or dialogs
-          const modals = document.querySelectorAll('.modal-open, .dialog-open, [data-modal="open"], [role="dialog"]');
-          if (modals.length > 0) {
-            console.log('Closing modal');
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-            return;
-          }
-
-          // PRIORITY 3: Navigate back in browser history if not on home page
-          const homeRoutes = ['/', '/home', '/portal'];
-          const isHomePage = homeRoutes.includes(pathname);
-
-          if (!isHomePage && window.history.length > 1) {
-            console.log('Navigating back to previous page');
-            window.history.back();
-            return;
-          }
-
-          // PRIORITY 4: Exit the app (only when no other action is possible)
-          console.log('Exiting app');
-          App.exitApp();
-        };
-
-        // Add the back button listener
-        backButtonListener = await App.addListener('backButton', handleBackButton);
-        console.log('Capacitor back button handler registered successfully');
-
-      } catch (error) {
-        console.log('Capacitor back button handler not loaded:', error.message);
+      // PRIORITY 1: Close cart sidebar if open
+      if (isCartOpen) {
+        setIsCartOpen(false);
+        console.log('Cart sidebar closed');
+        return;
       }
+
+      // PRIORITY 2: Close any open modals/dialogs
+      const modals = document.querySelectorAll('.modal-open, .dialog-open, [data-modal="open"], [role="dialog"]');
+      if (modals.length > 0) {
+        console.log('Closing modal');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        return;
+      }
+
+      // PRIORITY 3: Check for popups or dropdowns
+      const popups = document.querySelectorAll('[data-popup="open"], .popup-open, .dropdown-open');
+      if (popups.length > 0) {
+        const closeBtn = document.querySelector('.close-btn, [data-dismiss]');
+        if (closeBtn) closeBtn.click();
+        console.log('Closed popup');
+        return;
+      }
+
+      // PRIORITY 4: Check if we can go back in history
+      const homeRoutes = ['/', '/home', '/portal'];
+      const isHomePage = homeRoutes.includes(pathname);
+
+      if (!isHomePage && window.history.length > 1) {
+        console.log('Navigating back to previous page');
+        window.history.back();
+        return;
+      }
+
+      // PRIORITY 5: Exit the app (only when no other action is possible)
+      console.log('Exiting app');
+      const exitApp = async () => {
+        try {
+          const { App } = await import('@capacitor/app');
+          await App.exitApp();
+        } catch (err) {
+          console.error('Failed to exit app:', err);
+        }
+      };
+      exitApp();
     };
 
-    setupBackButtonHandler();
+    // Use the ionBackButton event for better priority handling
+    const handleIonBackButton = (event) => {
+      // Register with high priority (lower number = higher priority)
+      // Priority -1 runs before default handlers
+      event.detail.register(-1, handleHardwareBack);
+    };
 
-    // Clean up the listener when component unmounts
+    document.addEventListener('ionBackButton', handleIonBackButton);
+
     return () => {
-      if (backButtonListener && typeof backButtonListener.remove === 'function') {
-        backButtonListener.remove();
-        console.log('Capacitor back button handler removed');
-      }
+      document.removeEventListener('ionBackButton', handleIonBackButton);
     };
-  }, [isCartOpen, setIsCartOpen]); // Only depends on cart state
+  }, [isCartOpen, setIsCartOpen]);
 
   useEffect(() => {
     console.log('Current URL:', location.pathname);
